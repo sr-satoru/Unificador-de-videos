@@ -1,0 +1,5 @@
+{
+  "name": "Video Bit Modifier",
+  "description": "A user-friendly web interface to apply noise, color grading, and steganography to video files for local use. Upload videos, adjust parameters, save presets, and process them locally.",
+  "requestFramePermissions": []
+}
