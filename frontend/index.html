@@ -67,7 +67,9 @@
                             <p class="placeholder-text">Nenhum vídeo selecionado</p>
                             <p class="placeholder-subtext">Envie um vídeo para começar</p>
                         </div>
-                        <video id="videoPlayer" class="video-player" controls loop style="display: none;"></video>
+                        <div class="video-wrapper" id="videoWrapper" style="display: none;">
+                            <video id="videoPlayer" class="video-player" controls loop></video>
+                        </div>
                     </div>
                 </div>
                 
@@ -255,6 +257,22 @@
                                 </select>
                             </div>
                         </div>
+                        
+                        <!-- Padrão 1 -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                            </svg>
+                            <div class="setting-control">
+                                <label class="checkbox-label">
+                                    <span class="checkbox-text">Padrão 1</span>
+                                    <div class="checkbox-wrapper">
+                                        <input type="checkbox" class="checkbox-input" id="padrao1">
+                                        <div class="checkbox-slider"></div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="settings-footer">
@@ -267,7 +285,7 @@
                             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-4.5 0V6.375c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0110.5 10.5z" />
                             </svg>
-                            Monitore o resultado
+                            Iniciar edição
                         </button>
                         
                         <button class="button-secondary">
@@ -282,6 +300,7 @@
         </main>
     </div>
     
+    <script src="api/client.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

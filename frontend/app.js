@@ -5,6 +5,9 @@ const state = {
     files: [],
     selectedFile: null,
     activePreset: null,
+    currentJobId: null,
+    websocket: null,
+    backendConnected: false,
     settings: {
         brightness: 0,
         contrast: 0,
@@ -19,12 +22,94 @@ const state = {
 };
 
 // Inicialização
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await checkBackendConnection();
+    await initializePadrao1();
     initializeFileUploads();
     initializeSettings();
     initializePresets();
     updateVideoFilters();
+    initializeWebSocket();
 });
+
+// Verificar conexão com backend
+async function checkBackendConnection() {
+    try {
+        console.log('🔍 Verificando conexão com backend...');
+        const response = await apiClient.healthCheck();
+        console.log('✅ Backend conectado:', response);
+        state.backendConnected = true;
+        updateConnectionStatus(true);
+    } catch (error) {
+        console.error('❌ Erro ao conectar com backend:', error);
+        state.backendConnected = false;
+        updateConnectionStatus(false);
+    }
+}
+
+// Inicializar Padrão 1
+async function initializePadrao1() {
+    try {
+        const status = await apiClient.getPadrao1Status();
+        const padrao1Checkbox = document.getElementById('padrao1');
+        if (padrao1Checkbox) {
+            padrao1Checkbox.checked = status.enabled;
+            console.log('🎬 Padrão 1 status:', status.enabled ? 'Ativo' : 'Inativo');
+        }
+    } catch (error) {
+        console.error('❌ Erro ao carregar status do Padrão 1:', error);
+    }
+}
+
+// Atualizar status de conexão
+function updateConnectionStatus(connected) {
+    const statusIndicator = document.querySelector('.status-indicator');
+    if (statusIndicator) {
+        if (connected) {
+            statusIndicator.classList.remove('status-disconnected');
+            statusIndicator.classList.add('status-connected');
+            statusIndicator.querySelector('span').textContent = 'Backend Conectado';
+        } else {
+            statusIndicator.classList.remove('status-connected');
+            statusIndicator.classList.add('status-disconnected');
+            statusIndicator.querySelector('span').textContent = 'Backend Desconectado';
+        }
+    }
+}
+
+// Inicializar WebSocket
+function initializeWebSocket() {
+    const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    state.websocket = apiClient.connectWebSocket(clientId, (data) => {
+        handleWebSocketMessage(data);
+    });
+}
+
+// Processar mensagens WebSocket
+function handleWebSocketMessage(data) {
+    if (data.type === 'progress_update' && data.job_id === state.currentJobId) {
+        // Atualizar progresso dos arquivos
+        const progress = data.progress;
+        state.files.forEach(file => {
+            if (file.status === 'processing') {
+                file.progress = progress;
+            }
+        });
+        updateFileList();
+    } else if (data.type === 'job_completed' && data.job_id === state.currentJobId) {
+        // Job concluído
+        state.files.forEach(file => {
+            if (file.status === 'processing') {
+                file.status = 'completed';
+                file.progress = 100;
+            }
+        });
+        updateFileList();
+        showDownloadButton(data.job_id);
+    } else if (data.type === 'job_error') {
+        alert(`Erro no processamento: ${data.error}`);
+    }
+}
 
 // File Upload
 function initializeFileUploads() {
@@ -59,15 +144,28 @@ function initializeFileUploads() {
     });
 }
 
-function handleFiles(files) {
-    Array.from(files).forEach(file => {
-        if (file.type.startsWith('video/')) {
+async function handleFiles(files) {
+    const videoFiles = Array.from(files).filter(file => file.type.startsWith('video/'));
+    
+    if (videoFiles.length === 0) {
+        alert('Por favor, selecione apenas arquivos de vídeo.');
+        return;
+    }
+
+    try {
+        // Upload para o backend
+        const response = await apiClient.uploadVideos(videoFiles);
+        
+        // Adicionar arquivos ao estado
+        response.files.forEach(uploadedFile => {
             const fileObj = {
-                id: Date.now() + Math.random(),
-                file: file,
-                url: URL.createObjectURL(file),
+                id: uploadedFile.id,
+                file: videoFiles.find(f => f.name === uploadedFile.original_name),
+                url: URL.createObjectURL(videoFiles.find(f => f.name === uploadedFile.original_name)),
                 status: 'queued',
-                progress: 0
+                progress: 0,
+                backendId: uploadedFile.id,
+                originalName: uploadedFile.original_name
             };
             
             state.files.push(fileObj);
@@ -76,10 +174,13 @@ function handleFiles(files) {
                 state.selectedFile = fileObj;
                 updateVideoPreview();
             }
-        }
-    });
-    
-    updateFileList();
+        });
+        
+        updateFileList();
+    } catch (error) {
+        console.error('Erro ao fazer upload:', error);
+        alert(`Erro ao fazer upload: ${error.message}`);
+    }
 }
 
 function updateFileList() {
@@ -148,11 +249,12 @@ function removeFile(fileId) {
 function updateVideoPreview() {
     const videoPlayer = document.getElementById('videoPlayer');
     const videoContainer = document.getElementById('videoContainer');
+    const videoWrapper = document.getElementById('videoWrapper');
     const placeholder = videoContainer.querySelector('.video-placeholder');
     
     if (state.selectedFile) {
         videoPlayer.src = state.selectedFile.url;
-        videoPlayer.style.display = 'block';
+        if (videoWrapper) videoWrapper.style.display = 'block';
         if (placeholder) placeholder.style.display = 'none';
         
         videoPlayer.onloadedmetadata = () => {
@@ -160,7 +262,7 @@ function updateVideoPreview() {
             videoContainer.style.aspectRatio = `${videoPlayer.videoWidth} / ${videoPlayer.videoHeight}`;
         };
     } else {
-        videoPlayer.style.display = 'none';
+        if (videoWrapper) videoWrapper.style.display = 'none';
         if (placeholder) placeholder.style.display = 'flex';
         videoContainer.style.aspectRatio = '16 / 9';
     }
@@ -181,7 +283,14 @@ function updateVideoFilters() {
     ];
     
     videoPlayer.style.filter = filters.join(' ');
-    videoPlayer.style.transform = `scaleX(${state.settings.mirrored ? -1 : 1})`;
+    
+    // Aplicar espelhamento no vídeo e reverter nos controles
+    if (state.settings.mirrored) {
+        videoPlayer.classList.add('video-mirrored');
+    } else {
+        videoPlayer.classList.remove('video-mirrored');
+    }
+    
     videoPlayer.playbackRate = state.settings.speed / 100;
 }
 
@@ -213,6 +322,23 @@ function initializeSettings() {
         }
     });
     
+    // Padrão 1 toggle
+    const padrao1Checkbox = document.getElementById('padrao1');
+    if (padrao1Checkbox) {
+        padrao1Checkbox.addEventListener('change', async (e) => {
+            const enabled = e.target.checked;
+            try {
+                await apiClient.togglePadrao1(enabled);
+                console.log(`🎬 Padrão 1 ${enabled ? 'ativado' : 'desativado'}`);
+            } catch (error) {
+                console.error('❌ Erro ao alterar Padrão 1:', error);
+                // Reverter checkbox em caso de erro
+                padrao1Checkbox.checked = !enabled;
+                alert(`Erro ao ${enabled ? 'ativar' : 'desativar'} Padrão 1: ${error.message}`);
+            }
+        });
+    }
+    
     // Dropdown
     const quality = document.getElementById('quality');
     if (quality) {
@@ -224,8 +350,8 @@ function initializeSettings() {
     // Process button
     const processButton = document.getElementById('processButton');
     if (processButton) {
-        processButton.addEventListener('click', () => {
-            alert('Funcionalidade de processamento não implementada nesta versão do design system.');
+        processButton.addEventListener('click', async () => {
+            await processVideos();
         });
     }
     
@@ -250,17 +376,32 @@ function updateSliderValue(id, value) {
 }
 
 // Presets
-function initializePresets() {
-    const presetButtons = document.querySelectorAll('.preset-button');
-    presetButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const preset = button.dataset.preset;
-            applyPreset(preset);
+async function initializePresets() {
+    try {
+        // Carregar presets do backend
+        const presets = await apiClient.getPresets();
+        
+        const presetButtons = document.querySelectorAll('.preset-button');
+        presetButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const preset = button.dataset.preset;
+                applyPreset(preset, presets);
+            });
         });
-    });
+    } catch (error) {
+        console.error('Erro ao carregar presets:', error);
+        // Usar presets padrão se falhar
+        const presetButtons = document.querySelectorAll('.preset-button');
+        presetButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const preset = button.dataset.preset;
+                applyPreset(preset);
+            });
+        });
+    }
 }
 
-function applyPreset(presetName) {
+function applyPreset(presetName, backendPresets = null) {
     state.activePreset = presetName;
     
     // Atualizar botões
@@ -271,26 +412,164 @@ function applyPreset(presetName) {
         }
     });
     
-    // Aplicar configurações do preset
-    const presets = {
-        YouTube: { brightness: 5, contrast: 5, saturation: 10, blur: 0, noise: 0, speed: 100 },
-        Facebook: { brightness: 0, contrast: 8, saturation: 15, blur: 1, noise: 2, speed: 100 },
-        Instagram: { brightness: 14, contrast: -9, saturation: 22, blur: 5, noise: 8, speed: 90 },
-        TikTok: { brightness: 3, contrast: 13, saturation: -17, blur: 3.2, noise: 13, speed: 120 }
-    };
+    // Usar presets do backend se disponível, senão usar padrão
+    let preset;
+    if (backendPresets && backendPresets[presetName]) {
+        const backendPreset = backendPresets[presetName];
+        preset = {
+            brightness: backendPreset.color?.brightness || 0,
+            contrast: backendPreset.color?.contrast || 0,
+            saturation: backendPreset.color?.saturation || 0,
+            blur: backendPreset.color?.blur || 0,
+            noise: backendPreset.noise?.intensity || 0,
+            speed: backendPreset.effects?.speed || 100,
+            monochrome: backendPreset.color?.monochrome || false,
+            mirrored: backendPreset.color?.mirrored || false
+        };
+    } else {
+        // Presets padrão
+        const defaultPresets = {
+            YouTube: { brightness: 5, contrast: 5, saturation: 10, blur: 0, noise: 0, speed: 100, monochrome: false, mirrored: false },
+            Facebook: { brightness: 0, contrast: 8, saturation: 15, blur: 1, noise: 2, speed: 100, monochrome: false, mirrored: false },
+            Instagram: { brightness: 14, contrast: -9, saturation: 22, blur: 5, noise: 8, speed: 90, monochrome: false, mirrored: true },
+            TikTok: { brightness: 3, contrast: 13, saturation: -17, blur: 3.2, noise: 13, speed: 120, monochrome: false, mirrored: true }
+        };
+        preset = defaultPresets[presetName];
+    }
     
-    const preset = presets[presetName];
     if (preset) {
         Object.keys(preset).forEach(key => {
             state.settings[key] = preset[key];
             const slider = document.getElementById(key);
+            const checkbox = document.getElementById(key);
             if (slider) {
                 slider.value = preset[key];
                 updateSliderValue(key, preset[key]);
+            } else if (checkbox) {
+                checkbox.checked = preset[key];
             }
         });
         
         updateVideoFilters();
+    }
+}
+
+// Processar vídeos
+async function processVideos() {
+    if (state.files.length === 0) {
+        alert('Por favor, faça upload de pelo menos um vídeo.');
+        return;
+    }
+
+    // Preparar configurações para o backend
+    const processingSettings = {
+        noise: {
+            type: "Perlin",
+            intensity: state.settings.noise
+        },
+        color: {
+            brightness: state.settings.brightness,
+            contrast: state.settings.contrast,
+            saturation: state.settings.saturation,
+            blur: state.settings.blur,
+            monochrome: state.settings.monochrome,
+            mirrored: state.settings.mirrored
+        },
+        effects: {
+            speed: state.settings.speed
+        },
+        steganography: {
+            signature: "",
+            method: "LSB - Least Significant Bit",
+            intensity: 0
+        },
+        output: {
+            quality: state.settings.quality === 'Preserve' ? 'Preservar Original' : 
+                    state.settings.quality === 'High' ? 'HD (720p)' :
+                    state.settings.quality === 'Medium' ? 'Full HD (1080p)' : 'Preservar Original'
+        }
+    };
+
+    // Obter IDs dos arquivos do backend
+    const fileIds = state.files
+        .filter(file => file.backendId)
+        .map(file => file.backendId);
+
+    if (fileIds.length === 0) {
+        alert('Nenhum arquivo válido para processar.');
+        return;
+    }
+
+    try {
+        const processButton = document.getElementById('processButton');
+        if (processButton) {
+            processButton.disabled = true;
+            processButton.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Processando...
+            `;
+            processButton.onclick = null; // Remove previous download handler
+        }
+
+        // Atualizar status dos arquivos
+        state.files.forEach(file => {
+            if (file.backendId && fileIds.includes(file.backendId)) {
+                file.status = 'processing';
+                file.progress = 0;
+            }
+        });
+        updateFileList();
+
+        // Iniciar processamento
+        const response = await apiClient.processVideos(fileIds, processingSettings);
+        state.currentJobId = response.job_id;
+
+        alert(`Processamento iniciado! Job ID: ${response.job_id}`);
+    } catch (error) {
+        console.error('Erro ao processar vídeos:', error);
+        alert(`Erro ao processar vídeos: ${error.message}`);
+        
+        // Reverter status dos arquivos
+        state.files.forEach(file => {
+            if (file.status === 'processing') {
+                file.status = 'queued';
+            }
+        });
+        updateFileList();
+    } finally {
+        const processButton = document.getElementById('processButton');
+        if (processButton) {
+            processButton.disabled = false;
+            processButton.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-4.5 0V6.375c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0110.5 10.5z" />
+                </svg>
+                Iniciar edição
+            `;
+        }
+    }
+}
+
+// Show download button when processing is complete
+function showDownloadButton(jobId) {
+    const processButton = document.getElementById('processButton');
+    if (processButton) {
+        // Remove existing event listeners by cloning the button
+        const newButton = processButton.cloneNode(true);
+        processButton.parentNode.replaceChild(newButton, processButton);
+        
+        newButton.disabled = false;
+        newButton.innerHTML = `
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Baixar vídeos processados
+        `;
+        newButton.addEventListener('click', () => {
+            apiClient.downloadProcessedVideos(jobId);
+        });
     }
 }
 

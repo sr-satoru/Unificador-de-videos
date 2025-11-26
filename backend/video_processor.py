@@ -40,6 +40,10 @@ class VideoProcessor:
             duration = float(probe['format']['duration'])
             fps = eval(video_stream['r_frame_rate'])
             
+            # Check if audio stream exists
+            audio_streams = [s for s in probe['streams'] if s['codec_type'] == 'audio']
+            has_audio = len(audio_streams) > 0
+            
             # Determine output resolution based on quality setting
             width, height = self._get_output_resolution(video_stream, settings.output.quality)
             
@@ -75,16 +79,26 @@ class VideoProcessor:
             if settings.color.monochrome:
                 output_stream = output_stream.filter('hue', s=0)
             
-            # Create output with progress callback
-            output = ffmpeg.output(
-                output_stream,
-                input_stream.audio,
-                output_path,
-                vcodec='libx264',
-                acodec='aac',
-                preset='medium',
-                crf=23
-            )
+            # Create output - only include audio if it exists
+            if has_audio:
+                output = ffmpeg.output(
+                    output_stream,
+                    input_stream.audio,
+                    output_path,
+                    vcodec='libx264',
+                    acodec='aac',
+                    preset='medium',
+                    crf=23
+                )
+            else:
+                # Video only, no audio - não incluir stream de áudio
+                output = ffmpeg.output(
+                    output_stream,
+                    output_path,
+                    vcodec='libx264',
+                    preset='medium',
+                    crf=23
+                )
             
             # Run FFmpeg with progress tracking
             await self._run_ffmpeg_with_progress(output, duration, progress_callback)

@@ -22,9 +22,9 @@ if __name__ == "__main__":
     os.makedirs("outputs", exist_ok=True)
     os.makedirs("temp", exist_ok=True)
     
-    # Get port from environment variable or use default
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
+    # Get port and host from environment variable (sem fallback)
+    port = int(os.getenv("PORT"))
+    host = os.getenv("HOST")
     
     print("🎬 Starting Video Editor Backend...")
     print("📁 Created directories: uploads/, outputs/, temp/")

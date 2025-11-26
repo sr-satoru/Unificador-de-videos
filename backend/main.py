@@ -1,16 +1,15 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 import asyncio
-import json
 import os
 import uuid
 from typing import List, Dict, Any
 from datetime import datetime
+from pathlib import Path
 import logging
 
-from models import ProcessingSettings, VideoFile, ProcessingStatus, NoiseType, InsertionMethod, OutputQuality
+from models import ProcessingSettings, VideoFile, ProcessingStatus
 from video_processor import VideoProcessor
 from websocket_manager import WebSocketManager
 from database import db_manager
@@ -34,10 +33,9 @@ padrao1_logger.propagate = False  # Evitar logs duplicados
 
 app = FastAPI(title="Video Editor Backend", version="1.0.0")
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Frontend URLs
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,37 +45,33 @@ app.add_middleware(
 video_processor = VideoProcessor()
 websocket_manager = WebSocketManager()
 
-# Start cleanup service
 @app.on_event("startup")
 async def startup_event():
     """Start background services on startup"""
     asyncio.create_task(cleanup_manager.start_cleanup_service())
-    # Log removido para limpeza
     padrao1_logger.info("🎬 Sistema Padrão 1 inicializado e pronto!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Stop background services on shutdown"""
     cleanup_manager.stop_cleanup_service()
-    # Log removido para limpeza
 
 # Create directories
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("outputs", exist_ok=True)
 os.makedirs("temp", exist_ok=True)
 
+# Configurar caminho do frontend
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+
 # Store for active processing jobs
 active_jobs: Dict[str, Dict[str, Any]] = {}
 
-@app.get("/")
-async def root():
-    return {"message": "Video Editor Backend API", "version": "1.0.0"}
-
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-@app.post("/upload")
+@app.post("/api/upload")
 async def upload_videos(files: List[UploadFile] = File(...)):
     """Upload multiple video files"""
     try:
@@ -122,7 +116,7 @@ async def upload_videos(files: List[UploadFile] = File(...)):
         logger.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/process")
+@app.post("/api/process")
 async def process_videos(
     file_ids: List[str],
     settings: ProcessingSettings
@@ -189,25 +183,31 @@ async def process_videos_background(job_id: str, file_ids: List[str], settings: 
             
             # Apply Padrão 1 if enabled
             if padrao1_processor.is_enabled:
-                padrao1_logger.info(f"🎬 Aplicando Padrão 1 ao vídeo: {file_id}")
+                padrao1_logger.info(f"🎬 Aplicando Padrão 1 ao vídeo processado: {file_id}")
                 try:
-                    # Generate padrão1 output path
+                    # Criar caminho temporário para o vídeo com Padrão 1
                     base_name = os.path.splitext(os.path.basename(output_path))[0]
                     padrao1_output_path = os.path.join("outputs", f"{base_name}_padrao1.mp4")
                     
-                    # Apply padrão1 processing
+                    # Processar vídeo com Padrão 1
                     final_output = padrao1_processor.process_video(output_path, padrao1_output_path)
                     
-                    # Replace original output with padrão1 output
-                    if os.path.exists(final_output):
-                        os.replace(final_output, output_path)
-                        padrao1_logger.info(f"✅ Padrão 1 aplicado com sucesso: {file_id}")
-                    else:
-                        padrao1_logger.warning(f"⚠️ Arquivo padrão1 não encontrado: {final_output}")
+                    # Verificar se o arquivo foi criado corretamente
+                    if os.path.exists(final_output) and os.path.getsize(final_output) > 0:
+                        # Remover o arquivo original processado
+                        if os.path.exists(output_path):
+                            os.remove(output_path)
                         
+                        # Renomear o arquivo com Padrão 1 para o nome original
+                        os.rename(final_output, output_path)
+                        padrao1_logger.info(f"✅ Padrão 1 aplicado com sucesso: {file_id}")
+                        padrao1_logger.info(f"📁 Arquivo final: {output_path}")
+                    else:
+                        padrao1_logger.warning(f"⚠️ Arquivo Padrão 1 não foi criado corretamente, mantendo vídeo original")
                 except Exception as e:
                     padrao1_logger.error(f"❌ Erro ao aplicar Padrão 1: {e}")
-                    # Continue with original video if padrão1 fails
+                    padrao1_logger.error(f"📁 Mantendo vídeo processado original: {output_path}")
+                    # Continuar com o vídeo original se o Padrão 1 falhar
             
             # Store result
             active_jobs[job_id]["results"].append({
@@ -224,14 +224,25 @@ async def process_videos_background(job_id: str, file_ids: List[str], settings: 
         active_jobs[job_id]["progress"] = 100
         active_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         
+        # Create ZIP file automatically with processed videos
+        logger.info(f"📦 Criando arquivo ZIP para job {job_id}...")
+        try:
+            zip_path = await video_processor.create_zip(active_jobs[job_id]["results"])
+            active_jobs[job_id]["zip_path"] = zip_path
+            logger.info(f"✅ ZIP criado com sucesso: {zip_path}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao criar ZIP: {e}")
+            zip_path = None
+        
         # Update database
-        db_manager.update_job_status(job_id, "completed", 100)
+        db_manager.update_job_status(job_id, "completed", 100, zip_path=zip_path)
         
         # Notify WebSocket clients
         await websocket_manager.broadcast({
             "type": "job_completed",
             "job_id": job_id,
-            "status": "completed"
+            "status": "completed",
+            "zip_ready": zip_path is not None
         })
         
     except Exception as e:
@@ -262,7 +273,7 @@ def update_job_progress(job_id: str, file_progress: float, file_index: int, tota
             "progress": total_progress
         }))
 
-@app.get("/jobs/{job_id}")
+@app.get("/api/jobs/{job_id}")
 async def get_job_status(job_id: str):
     """Get processing job status"""
     if job_id not in active_jobs:
@@ -270,7 +281,7 @@ async def get_job_status(job_id: str):
     
     return active_jobs[job_id]
 
-@app.get("/jobs/{job_id}/download")
+@app.get("/api/jobs/{job_id}/download")
 async def download_processed_videos(job_id: str):
     """Download processed videos as ZIP"""
     if job_id not in active_jobs:
@@ -280,11 +291,18 @@ async def download_processed_videos(job_id: str):
     if job["status"] != "completed":
         raise HTTPException(status_code=400, detail="Job not completed yet")
     
-    # Create ZIP file with processed videos
-    zip_path = await video_processor.create_zip(job["results"])
+    # Use existing ZIP file if available
+    zip_path = job.get("zip_path")
     
-    # Update database with zip path
-    db_manager.update_job_status(job_id, "completed", zip_path=zip_path)
+    # If ZIP doesn't exist, create it
+    if not zip_path or not os.path.exists(zip_path):
+        logger.info(f"📦 Criando ZIP para download do job {job_id}...")
+        zip_path = await video_processor.create_zip(job["results"])
+        active_jobs[job_id]["zip_path"] = zip_path
+        db_manager.update_job_status(job_id, "completed", zip_path=zip_path)
+    
+    if not os.path.exists(zip_path):
+        raise HTTPException(status_code=500, detail="ZIP file not found")
     
     return FileResponse(
         zip_path,
@@ -303,7 +321,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         websocket_manager.disconnect(client_id)
 
-@app.get("/presets")
+@app.get("/api/presets")
 async def get_presets():
     """Get available presets"""
     return {
@@ -329,131 +347,89 @@ async def get_presets():
         }
     }
 
-@app.get("/cleanup/stats")
-async def get_cleanup_stats():
-    """Get cleanup statistics and storage usage"""
-    try:
-        stats = cleanup_manager.get_cleanup_stats()
-        storage = cleanup_manager.get_storage_usage()
-        
-        return {
-            "database_stats": stats,
-            "storage_usage": storage,
-            "cleanup_settings": {
-                "upload_cleanup_delay": cleanup_manager.upload_cleanup_delay,
-                "zip_cleanup_delay": cleanup_manager.zip_cleanup_delay,
-                "processed_video_cleanup_delay": cleanup_manager.processed_video_cleanup_delay,
-                "cleanup_interval": cleanup_manager.cleanup_interval
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error getting cleanup stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/cleanup/force/{job_id}")
-async def force_cleanup_job(job_id: str):
-    """Force cleanup of all files related to a specific job"""
-    try:
-        await cleanup_manager.force_cleanup_job(job_id)
-        return {"message": f"Force cleanup completed for job {job_id}"}
-    except Exception as e:
-        logger.error(f"Error in force cleanup: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/cleanup/manual")
-async def manual_cleanup():
-    """Trigger manual cleanup cycle"""
-    try:
-        await cleanup_manager.perform_cleanup_cycle()
-        return {"message": "Manual cleanup completed"}
-    except Exception as e:
-        logger.error(f"Error in manual cleanup: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ===== PADRÃO 1 ENDPOINTS =====
 
-@app.post("/padrao1/toggle")
+@app.post("/api/padrao1/toggle")
 async def toggle_padrao1(data: dict):
     """Ativa ou desativa o Padrão 1"""
     enabled = data.get("enabled", False)
     try:
         padrao1_processor.set_enabled(enabled)
-        
-        # Log detalhado no terminal
         status = "✅ ATIVADO" if enabled else "❌ DESATIVADO"
         padrao1_logger.info(f"🎬 PADRÃO 1 {status}")
-        padrao1_logger.info(f"🎬 Padrão 1 foi {'ativado' if enabled else 'desativado'} pelo usuário")
-        padrao1_logger.info(f"📊 Status atual: {'Habilitado' if enabled else 'Desabilitado'}")
         
         return {
             "message": f"Padrão 1 {'ativado' if enabled else 'desativado'} com sucesso",
             "enabled": enabled,
             "timestamp": datetime.now().isoformat()
         }
-        
     except Exception as e:
         logger.error(f"❌ Erro ao alterar status do Padrão 1: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/padrao1/status")
+@app.get("/api/padrao1/status")
 async def get_padrao1_status():
     """Obtém o status atual do Padrão 1"""
     try:
         status = padrao1_processor.is_enabled
-        padrao1_logger.info(f"📊 Consulta de status do Padrão 1: {'Ativo' if status else 'Inativo'}")
-        
         return {
             "enabled": status,
             "timestamp": datetime.now().isoformat(),
             "message": "Padrão 1 está ativo" if status else "Padrão 1 está inativo"
         }
-        
     except Exception as e:
         logger.error(f"❌ Erro ao consultar status do Padrão 1: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/padrao1/process")
-async def process_with_padrao1(file_id: str):
-    """Processa um vídeo específico com Padrão 1"""
-    try:
-        if not padrao1_processor.is_enabled:
-            logger.warning("⚠️ Tentativa de processar com Padrão 1 desativado")
-            raise HTTPException(status_code=400, detail="Padrão 1 está desativado")
+# Servir frontend estático - deve ser a última rota
+if FRONTEND_DIR.exists():
+    # Rota raiz - servir index.html
+    @app.get("/")
+    async def serve_index():
+        """Serve index.html"""
+        index_path = FRONTEND_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    
+    # Servir arquivos estáticos (CSS, JS, imagens, etc.)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """Serve frontend files"""
+        # Primeiro, verificar se é um arquivo estático do frontend
+        file_path = FRONTEND_DIR / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
         
-        # Encontrar o arquivo
-        file_path = None
-        for filename in os.listdir("uploads"):
-            if filename.startswith(file_id):
-                file_path = os.path.join("uploads", filename)
-                break
+        # Se não for arquivo estático, verificar se é rota da API do backend
+        if full_path.startswith("api/") and not (FRONTEND_DIR / full_path).exists():
+            # É uma rota da API do backend, não servir frontend
+            raise HTTPException(status_code=404, detail="Not found")
         
-        if not file_path:
-            logger.error(f"❌ Arquivo não encontrado para ID: {file_id}")
-            raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+        # Ignorar outras rotas do FastAPI
+        if full_path.startswith("docs") or full_path.startswith("openapi.json") or \
+           full_path.startswith("redoc") or full_path.startswith("ws/"):
+            raise HTTPException(status_code=404, detail="Not found")
         
-        padrao1_logger.info(f"🎬 Iniciando processamento com Padrão 1 para arquivo: {file_id}")
+        # Se não encontrar, servir index.html (para SPA routing)
+        index_path = FRONTEND_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
         
-        # Gerar caminho de saída
-        input_path = Path(file_path)
-        output_path = str(Path("outputs") / f"{file_id}_padrao1{input_path.suffix}")
-        
-        # Processar vídeo
-        result_path = padrao1_processor.process_video(file_path, output_path)
-        
-        padrao1_logger.info(f"✅ Processamento com Padrão 1 concluído: {result_path}")
-        
-        return {
-            "message": "Vídeo processado com Padrão 1 com sucesso",
-            "file_id": file_id,
-            "output_path": result_path,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Erro no processamento com Padrão 1: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=404, detail="File not found")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    from dotenv import load_dotenv
+    from pathlib import Path
+    
+    # Carregar variáveis de ambiente
+    env_path = Path(__file__).parent / ".env"
+    load_dotenv(dotenv_path=env_path)
+    
+    # Obter porta e host das variáveis de ambiente (sem fallback)
+    port = int(os.getenv("PORT"))
+    host = os.getenv("HOST")
+    
+    uvicorn.run(app, host=host, port=port)
 

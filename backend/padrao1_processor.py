@@ -28,8 +28,8 @@ def criar_efeito_blur_inicial(video, duracao_blur=2.0, intensidade_blur=30):
     """Aplica efeito de blur apenas nos primeiros X segundos"""
     logger.info(f"🌫️ Aplicando blur nos primeiros {duracao_blur}s...")
     
-    def aplicar_blur_inicial(get_frame, t):
-        frame = get_frame(t)
+    def aplicar_blur_inicial(t):
+        frame = video.get_frame(t)
         
         # Aplicar blur apenas nos primeiros segundos
         if t < duracao_blur:
@@ -42,15 +42,15 @@ def criar_efeito_blur_inicial(video, duracao_blur=2.0, intensidade_blur=30):
             # Sem blur
             return frame
     
-    return video.fl(aplicar_blur_inicial)
+    return video.with_updated_frame_function(aplicar_blur_inicial)
 
 def criar_efeito_padrao_complexo(video):
     """Aplica padrão complexo com diferentes velocidades e efeitos"""
     logger.info("🎬 Aplicando padrão complexo...")
     logger.info("📋 Sequência: Blur(2s) → Pausa(2s) → Velocidade 0.9x(1s) → Piscada+Zoom(2s) → Normal(3s) → Piscada sem zoom → Velocidade 0.8x → Normal(2.5s) → Piscada+Zoom(2s)")
     
-    def aplicar_padrao_complexo(get_frame, t):
-        frame = get_frame(t)
+    def aplicar_padrao_complexo(t):
+        frame = video.get_frame(t)
         
         # Sequência de efeitos baseada no tempo
         if t < 2.0:
@@ -161,7 +161,7 @@ def criar_efeito_padrao_complexo(video):
                 # Vídeo normal
                 return frame
     
-    return video.fl(aplicar_padrao_complexo)
+    return video.with_updated_frame_function(aplicar_padrao_complexo)
 
 class Padrao1Processor:
     """Processador para aplicar o Padrão 1 nos vídeos"""
@@ -194,12 +194,20 @@ class Padrao1Processor:
             input_path = Path(video_path)
             output_path = str(input_path.parent / f"{input_path.stem}_padrao1{input_path.suffix}")
         
+        video = None
+        video_com_blur = None
+        video_final = None
+        
         try:
             # Carregar vídeo
             logger.info("📁 Carregando vídeo...")
             video = VideoFileClip(str(video_path))
             
             logger.info(f"📊 Duração do vídeo: {video.duration:.2f} segundos")
+            
+            # Verificar se tem áudio
+            has_audio = video.audio is not None
+            logger.info(f"🔊 Vídeo {'tem' if has_audio else 'não tem'} áudio")
             
             # Aplicar efeito de blur apenas nos primeiros 2 segundos
             video_com_blur = criar_efeito_blur_inicial(
@@ -208,25 +216,38 @@ class Padrao1Processor:
                 intensidade_blur=25
             )
             
+            # Preservar áudio se existir
+            if has_audio:
+                video_com_blur = video_com_blur.with_audio(video.audio)
+            
             # Aplicar padrão complexo
             video_final = criar_efeito_padrao_complexo(video_com_blur)
             
+            # Preservar áudio se existir
+            if has_audio:
+                video_final = video_final.with_audio(video.audio)
+            
             # Salvar vídeo editado
             logger.info("💾 Salvando vídeo editado...")
-            video_final.write_videofile(
-                str(output_path),
-                codec='libx264',
-                audio_codec='aac',
-                temp_audiofile='temp-audio.m4a',
-                remove_temp=True,
-                verbose=False,
-                logger=None
-            )
             
-            # Fechar clips
-            video.close()
-            video_com_blur.close()
-            video_final.close()
+            # Configurar parâmetros de escrita baseado na presença de áudio
+            if has_audio:
+                video_final.write_videofile(
+                    str(output_path),
+                    codec='libx264',
+                    audio_codec='aac',
+                    temp_audiofile='temp-audio.m4a',
+                    remove_temp=True
+                )
+            else:
+                # Se não tem áudio, não tentar processar áudio
+                video_final.write_videofile(
+                    str(output_path),
+                    codec='libx264',
+                    audio=False,
+                    temp_audiofile='temp-audio.m4a',
+                    remove_temp=True
+                )
             
             logger.info(f"✅ Vídeo editado salvo em: {output_path}")
             return output_path
@@ -234,6 +255,23 @@ class Padrao1Processor:
         except Exception as e:
             logger.error(f"❌ Erro ao processar vídeo: {e}")
             raise e
+        finally:
+            # Garantir que todos os clips sejam fechados
+            if video:
+                try:
+                    video.close()
+                except:
+                    pass
+            if video_com_blur:
+                try:
+                    video_com_blur.close()
+                except:
+                    pass
+            if video_final:
+                try:
+                    video_final.close()
+                except:
+                    pass
 
 # Instância global do processador
 padrao1_processor = Padrao1Processor()
