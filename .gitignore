@@ -115,3 +115,6 @@ config.ini
 secrets.json
 *.key
 
+/__pycache__
+/backend/__pycache__
+/venv
