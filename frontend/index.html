@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design System - Video Modifier</title>
+    <link rel="icon" type="image/svg+xml" href="favivon.ico">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100">
+    <div class="container">
+        <main class="main-grid">
+            
+            <!-- Coluna Esquerda - Upload e Lista -->
+            <div class="panel-left">
+                <div class="section">
+                    <h3 class="section-title">▷ Baixe o padrão</h3>
+                    <div class="file-upload-area" id="uploadArea1">
+                        <input type="file" id="fileInput1" class="file-input" multiple accept="video/*">
+                        <button class="upload-button" onclick="document.getElementById('fileInput1').click()">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3.75 18A5.25 5.25 0 009 20.25h6a5.25 5.25 0 005.25-5.25c0-2.01-1.223-3.755-3-4.592a3.752 3.752 0 00-6.958 0c-1.777.837-3 2.582-3 4.592z" />
+                            </svg>
+                            Vídeo principal
+                        </button>
+                        <p class="upload-hint">Arraste e solte múltiplos vídeos ou clique para selecionar</p>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h3 class="section-title">▷ Processamento de acordo com o padrão</h3>
+                    <div class="file-upload-area" id="uploadArea2">
+                        <input type="file" id="fileInput2" class="file-input" multiple accept="video/*">
+                        <button class="upload-button" onclick="document.getElementById('fileInput2').click()">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3.75 18A5.25 5.25 0 009 20.25h6a5.25 5.25 0 005.25-5.25c0-2.01-1.223-3.755-3-4.592a3.752 3.752 0 00-6.958 0c-1.777.837-3 2.582-3 4.592z" />
+                            </svg>
+                            Vídeos adicionais
+                        </button>
+                        <p class="upload-hint">Arraste e solte múltiplos vídeos ou clique para selecionar</p>
+                    </div>
+                </div>
+                
+                <div class="file-list-container">
+                    <div id="fileList" class="file-list-empty">
+                        <p class="empty-text">Sua fila está vazia.</p>
+                        <p class="empty-subtext">Envie um vídeo para começar.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Coluna Central - Preview e Presets -->
+            <div class="panel-center">
+                <div class="video-preview-card">
+                    <div class="preview-header">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L12 15.25l5.571-3m-5.571 0l-5.571 3 5.571 3m5.571-3l5.571-3-5.571-3" />
+                        </svg>
+                        <h2 class="preview-title">Creomixer 0.9f Beta</h2>
+                    </div>
+                    <div class="video-container" id="videoContainer">
+                        <div class="video-placeholder">
+                            <svg class="icon-large" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
+                            </svg>
+                            <p class="placeholder-text">Nenhum vídeo selecionado</p>
+                            <p class="placeholder-subtext">Envie um vídeo para começar</p>
+                        </div>
+                        <video id="videoPlayer" class="video-player" controls loop style="display: none;"></video>
+                    </div>
+                </div>
+                
+                <div class="presets-card">
+                    <h3 class="presets-title">Predefinições</h3>
+                    <div class="presets-grid">
+                        <button class="preset-button" data-preset="YouTube">
+                            <div class="preset-content">
+                                <img src="icon/youtube.svg" alt="YouTube" class="preset-icon">
+                                <span>YouTube</span>
+                            </div>
+                            <div class="preset-indicator"></div>
+                        </button>
+                        <button class="preset-button" data-preset="Facebook">
+                            <div class="preset-content">
+                                <img src="icon/facebook.png" alt="Facebook" class="preset-icon">
+                                <span>Facebook</span>
+                            </div>
+                            <div class="preset-indicator"></div>
+                        </button>
+                        <button class="preset-button" data-preset="Instagram">
+                            <div class="preset-content">
+                                <img src="icon/instagram.png" alt="Instagram" class="preset-icon">
+                                <span>Instagram</span>
+                            </div>
+                            <div class="preset-indicator"></div>
+                        </button>
+                        <button class="preset-button" data-preset="TikTok">
+                            <div class="preset-content">
+                                <img src="icon/tiktok.png" alt="TikTok" class="preset-icon">
+                                <span>TikTok</span>
+                            </div>
+                            <div class="preset-indicator"></div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Coluna Direita - Configurações -->
+            <div class="panel-right">
+                <div class="settings-card">
+                    <h3 class="settings-title">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.572a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+                        </svg>
+                        Filtros de vídeo
+                    </h3>
+                    
+                    <div class="settings-list">
+                        <!-- Brilho -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Brilho</label>
+                                    <span class="slider-value" id="brightnessValue">0%</span>
+                                </div>
+                                <input type="range" class="slider" id="brightness" min="-100" max="100" value="0" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Contraste -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 12.75a.75.75 0 100-1.5.75.75 0 000 1.5zM12 21a9 9 0 100-18 9 9 0 000 18zM12 15a3 3 0 100-6 3 3 0 000 6z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Contraste</label>
+                                    <span class="slider-value" id="contrastValue">0%</span>
+                                </div>
+                                <input type="range" class="slider" id="contrast" min="-100" max="100" value="0" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Saturação -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Saturação</label>
+                                    <span class="slider-value" id="saturationValue">0%</span>
+                                </div>
+                                <input type="range" class="slider" id="saturation" min="-100" max="100" value="0" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Borrão -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Borrão</label>
+                                    <span class="slider-value" id="blurValue">0%</span>
+                                </div>
+                                <input type="range" class="slider" id="blur" min="0" max="100" value="0" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Ruído -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <circle cx="12" cy="12" r="2.25" fill="currentColor" opacity="0.5"/>
+                                <circle cx="6" cy="7" r="1.5" fill="currentColor" opacity="0.5"/>
+                                <circle cx="18" cy="17" r="1.5" fill="currentColor" opacity="0.5"/>
+                                <circle cx="17" cy="6" r="1" fill="currentColor" opacity="0.5"/>
+                                <circle cx="7" cy="18" r="1" fill="currentColor" opacity="0.5"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 21a9 9 0 100-18 9 9 0 000 18z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Ruído/Grunge</label>
+                                    <span class="slider-value" id="noiseValue">0%</span>
+                                </div>
+                                <input type="range" class="slider" id="noise" min="0" max="100" value="0" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Monocromático -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 21a9 9 0 100-18 9 9 0 000 18zM12 21v-9m0 9H3m9-9H3" />
+                            </svg>
+                            <div class="setting-control">
+                                <label class="checkbox-label">
+                                    <span class="checkbox-text">P/B (Monocromático)</span>
+                                    <div class="checkbox-wrapper">
+                                        <input type="checkbox" class="checkbox-input" id="monochrome">
+                                        <div class="checkbox-slider"></div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Espelhado -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 21v-2.25m0 0a9 9 0 009-9h-1.011a8.956 8.956 0 00-7.989-7.057m-7.989 7.057h-1.011a9 9 0 009 9m-9-9V3m0 5.25a9 9 0 002.011 5.743" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9L12 3l9 6" />
+                            </svg>
+                            <div class="setting-control">
+                                <label class="checkbox-label">
+                                    <span class="checkbox-text">Espelhado</span>
+                                    <div class="checkbox-wrapper">
+                                        <input type="checkbox" class="checkbox-input" id="mirrored">
+                                        <div class="checkbox-slider"></div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Velocidade -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div class="setting-control">
+                                <div class="slider-header">
+                                    <label class="slider-label">Velocidade</label>
+                                    <span class="slider-value" id="speedValue">1.00x</span>
+                                </div>
+                                <input type="range" class="slider" id="speed" min="50" max="200" value="100" step="1">
+                            </div>
+                        </div>
+                        
+                        <!-- Qualidade -->
+                        <div class="setting-item">
+                            <svg class="setting-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.562L16.25 21.75l-.648-1.188a2.25 2.25 0 01-1.4-1.4l-1.188-.648 1.188-.648a2.25 2.25 0 011.4-1.4l.648-1.188.648 1.188a2.25 2.25 0 011.4 1.4l1.188.648-1.188.648a2.25 2.25 0 01-1.4 1.4z" />
+                            </svg>
+                            <div class="setting-control">
+                                <label class="dropdown-label">Qualidade de Saída</label>
+                                <select class="dropdown" id="quality">
+                                    <option value="Preserve">Preserve</option>
+                                    <option value="High">High</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Low">Low</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-footer">
+                        <div class="status-indicator status-connected">
+                            <div class="status-dot"></div>
+                            <span>Backend Conectado</span>
+                        </div>
+                        
+                        <button class="button-primary" id="processButton">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-4.5 0V6.375c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0110.5 10.5z" />
+                            </svg>
+                            Monitore o resultado
+                        </button>
+                        
+                        <button class="button-secondary">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.664 1.208-.766M11.42 15.17l-4.636 4.636a2.121 2.121 0 01-3 0l-.364-.364a2.121 2.121 0 010-3L11.42 15.17zM13.849 5.232L5.232 13.85m8.617-8.618a2.121 2.121 0 013 0l.364.364a2.121 2.121 0 010 3l-4.636 4.636m-3.03-2.497l-2.496 3.03" />
+                            </svg>
+                            Reportar um bug
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
+
